@@ -1,7 +1,11 @@
 google-genai
 exa_py
 streamlit
-python-dotenv
+streamlit-mermaid
+plotly
 chromadb
 pymupdf
 pillow
+python-dotenv
+gTTS
+markitdown

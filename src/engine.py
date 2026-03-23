@@ -60,33 +60,84 @@ class SynapseEngine:
         
         return "No external analogy found."
 
-    def generate_dossier(self, gemini_file, user_query, persona_prompt):
+    def ingest_local_context(self, text):
+        """
+        Chunks the text and stores it in ChromaDB.
+        This allows the 'Local Context' pillar of the Dossier to work.
+        """
+        # 1. Simple chunking: Split by double newlines (paragraphs)
+        # Sliding window chunking
+        chunk_size = 1000
+        overlap = 200
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + chunk_size
+            chunks.append(text[start:end])
+            start += (chunk_size - overlap)
+            
+        if not chunks: return
+        ids = [f"id_{int(time.time())}_{i}" for i in range(len(chunks))]
+        self.collection.add(documents=chunks, ids=ids)
+            
+        # 2. Create unique IDs for these chunks
+        ids = [f"id_{int(time.time())}_{i}" for i in range(len(chunks))]
+        
+        # 3. Add to ChromaDB
+        try:
+            self.collection.add(
+                documents=chunks,
+                ids=ids
+            )
+        except Exception as e:
+            print(f"ChromaDB Error: {e}")
+
+    def generate_dossier(self, gemini_file, user_query, persona_prompt, use_external=False):
         """Synthesizes File API, ChromaDB, and Exa.ai into a Study Dossier."""
         
-        # 1. RAG: Retrieve local semantic context
+        # 1. RAG: Retrieve the most relevant 3 snippets from ChromaDB
         results = self.collection.query(query_texts=[user_query], n_results=3)
         local_context = "\n".join(results['documents'][0]) if results['documents'] else ""
 
-        # 2. TRIGGER EXPLAINER ENGINE (For Global Scholar or Deep Study)
+        # 2. CONDITIONAL ROUTING: Only use Exa.ai if mode is 'Deep Study'
         external_context = ""
-        # We ask Gemini to identify the 'technical anchor' first
-        term_response = self.client.models.generate_content(
-            model=self.model_id,
-            contents=[f"Identify the primary technical concept in this query for a search engine: {user_query}"]
-        )
-        tech_term = term_response.text.strip()
-        external_context = self.get_web_explainer(tech_term)
+        if use_external:
+            try:
+                # Identify technical anchor
+                term_response = self.client.models.generate_content(
+                    model=self.model_id,
+                    contents=[f"Identify the primary technical concept in this query: {user_query}"]
+                )
+                tech_term = term_response.text.strip()
+                external_context = self.get_web_explainer(tech_term)
+            except Exception as e:
+                external_context = f"Neural search unavailable: {str(e)}"
 
-        # 3. CONSTRUCT MULTIMODAL PROMPT
+        # 3. CONSTRUCT MULTIMODAL PROMPT (With formatting mandates)
         system_instruction = f"""
         {persona_prompt}
         
-        Your analysis must combine:
-        1. VISUAL CONTEXT: The layout/charts in the attached PDF.
-        2. LOCAL CONTEXT: Key snippets from the textbook: {local_context}
-        3. EXTERNAL CONTEXT: A simplified real-world analogy found via neural search: {external_context}
+        ---
+        STRICT FORMATTING RULES:
+        - DENSITY: Use aggressive whitespace. Use blocks for LaTeX formatted equations
+        - SEPARATION: Use '---' horizontal rules between major sections.
+        - MATH: Use LaTeX for ALL formulas ($...$). 
         
-        Return a 'Study Dossier' that is structured, clear, and reduces cognitive load.
+        MERMAID DIAGRAM RULES (CRITICAL):
+        1. Always start with 'flowchart TD'.
+        2. EVERY node label MUST be in double quotes to avoid syntax errors. 
+           Example: A["f : S -> S"] --> B["Fixed Point Found"]
+        3. DO NOT use math symbols like '∘', '→', or LaTeX inside Mermaid labels. Use plain text only (e.g., "f composed with f" instead of "f ∘ f").
+        
+        VISUAL ENGINE RULES:
+        - ROADMAPS: Use ```mermaid code blocks.
+        - GRAPHS: Use ```python_plotly code blocks.
+        ---
+        
+        SOURCES:
+        1. Visual: The attached PDF layout.
+        2. Local: {local_context}
+        3. Web: {external_context}
         """
 
         # 4. GENERATE
