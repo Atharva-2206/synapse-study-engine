@@ -11,14 +11,11 @@ class SynapseEngine:
     def __init__(self):
         self.client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
         self.exa = Exa(api_key=os.getenv("EXA_API_KEY"))
-        
         self.db = chromadb.PersistentClient(path="./chroma_db")
         self.collection = self.db.get_or_create_collection("study_material")
-        
         self.model_id = "gemini-2.5-flash"
 
     def clear_context(self):
-        """Safely clears all documents by deleting and recreating the ChromaDB collection."""
         try:
             self.db.delete_collection("study_material")
         except Exception:
@@ -26,7 +23,6 @@ class SynapseEngine:
         self.collection = self.db.get_or_create_collection("study_material")
 
     def rate_limited_generate(self, contents, status_callback=None):
-        """A core wrapper that prevents Streamlit from crashing on 429 quota errors."""
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -44,22 +40,19 @@ class SynapseEngine:
                         status_callback(f"Gemini Free-Tier Rate Limit Hit. Pausing for {wait_time}s to recover...")
                     time.sleep(wait_time)
                 else:
-                    raise e # Re-raise if it is a real error
+                    raise e 
         raise Exception("Failed after maximum retries due to rate limits.")
 
     def upload_to_gemini(self, file_path, status_callback=None):
-        """Natively uploads file to Gemini File API for context (with rate limit protection)."""
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 file = self.client.files.upload(file=file_path)
-                
                 while file.state.name != "ACTIVE":
                     if file.state.name == "FAILED":
                         raise Exception("Gemini File Processing Failed.")
                     time.sleep(2)
                     file = self.client.files.get(name=file.name)
-                    
                 return file
             except Exception as e:
                 error_msg = str(e)
@@ -74,32 +67,37 @@ class SynapseEngine:
                     raise e
         raise Exception("Failed to upload file after maximum retries.")
 
-    def get_web_explainer(self, technical_term, status_callback=None):
-        """
-        The Explainer Engine: Using Exa.ai Neural Search.
-        Gracefully degrades if the Exa API quota is exhausted.
-        """
-        search_query = f"Here is a simple, real-world analogy to explain {technical_term} to a student:"
+    def perform_web_search(self, query, search_type="analogy", status_callback=None):
+        if search_type == "analogy":
+            search_query = f"Here is a simple, real-world analogy to explain {query} to a student:"
+        else:
+            search_query = query
+
         try:
             results = self.exa.search_and_contents(
                 search_query, type="neural", use_autoprompt=True,
-                num_results=1, text=True, highlights=True 
+                num_results=3 if search_type == "factual" else 1, text=True, highlights=True 
             )
             if results.results:
-                best_match = results.results[0]
-                return f"Source: {best_match.url}\nContent: {best_match.text[:1500]}"
+                if search_type == "factual":
+                    context = "Web Search Results:\n"
+                    for r in results.results:
+                        context += f"- Source: {r.url}\n  Content: {r.text[:1000]}\n"
+                    return context
+                else:
+                    best_match = results.results[0]
+                    return f"Source: {best_match.url}\nContent: {best_match.text[:1500]}"
         except Exception as e:
             error_msg = str(e).lower()
             if "429" in error_msg or "quota" in error_msg or "limit" in error_msg:
                 if status_callback:
-                    status_callback("Exa.ai search quota reached. Relying on local documents only.")
+                    status_callback("Exa.ai search quota reached. Relying on local memory only.")
                 return "External context unavailable (API Quota Exceeded)."
             else:
                 return f"Exa Search Error: {str(e)}"
-        return "No external analogy found."
+        return "No external context found."
 
     def ingest_local_context(self, text):
-        """Chunks the text and stores it in ChromaDB."""
         if not text.strip(): return
         
         chunk_size = 1000
@@ -116,32 +114,40 @@ class SynapseEngine:
         try:
             self.collection.add(documents=chunks, ids=ids)
         except Exception as e:
-            print(f"ChromaDB Error: {e}")
+            pass
 
-    def generate_dossier(self, gemini_files, user_query, persona_prompt, use_external=False, status_callback=None):
-        """Synthesizes File API, ChromaDB, and Exa.ai into a Study Dossier."""
-        
+    def generate_dossier(self, gemini_files, user_query, persona_name, persona_prompt, use_external=False, status_callback=None):
         local_context = ""
         if self.collection.count() > 0:
             results = self.collection.query(query_texts=[user_query], n_results=3)
             local_context = "\n".join(results['documents'][0]) if results['documents'] else ""
 
+        fileless_mode = len(gemini_files) == 0
         external_context = ""
-        if use_external:
+
+        if use_external or fileless_mode:
             try:
-                term_response = self.rate_limited_generate(
-                    contents=[f"Identify the primary technical concept in this query: {user_query}"],
-                    status_callback=status_callback
-                )
-                tech_term = term_response.text.strip()
-                # Pass the status callback down to the Exa search
-                external_context = self.get_web_explainer(tech_term, status_callback=status_callback)
-            except Exception as e:
-                external_context = f"Neural search unavailable: {str(e)}"
+                if fileless_mode or persona_name == "Internet Searcher":
+                    if status_callback: status_callback("Searching the web for factual context...")
+                    external_context = self.perform_web_search(user_query, search_type="factual", status_callback=status_callback)
+                else:
+                    if status_callback: status_callback("Extracting technical concepts for web analogy...")
+                    term_response = self.rate_limited_generate(
+                        contents=[f"Identify the primary technical concept in this query: {user_query}"],
+                        status_callback=status_callback
+                    )
+                    tech_term = term_response.text.strip()
+                    external_context = self.perform_web_search(tech_term, search_type="analogy", status_callback=status_callback)
+            except Exception:
+                external_context = "Neural search unavailable."
+
+        fileless_notice = ""
+        if fileless_mode:
+            fileless_notice = "\n[CRITICAL SYSTEM NOTICE: NO FILES UPLOADED. Ignore ALL prompt formatting rules demanding 'Extract from PDF', 'Analyze visual layouts', or 'Pull from local context'. Answer strictly using your internal knowledge and the Web Context provided below.]\n"
 
         system_instruction = f"""
         {persona_prompt}
-        
+        {fileless_notice}
         ---
         STRICT FORMATTING RULES:
         - DENSITY: Use aggressive whitespace. Use blocks for LaTeX formatted equations
@@ -152,7 +158,7 @@ class SynapseEngine:
         1. Always start with 'flowchart TD' or 'graph TD'.
         2. EVERY node label MUST be in double quotes to avoid syntax errors. 
            Example: A["f : S -> S"] --> B["Fixed Point Found"]
-        3. DO NOT use math symbols like '∘', '→', or LaTeX inside Mermaid labels. Use plain text only (e.g., "f composed with f" instead of "f ∘ f").
+        3. DO NOT use math symbols like '∘', '→', or LaTeX inside Mermaid labels. Use plain text only.
         
         VISUAL ENGINE RULES:
         - ROADMAPS: Use ```mermaid code blocks.
@@ -160,9 +166,8 @@ class SynapseEngine:
         ---
         
         SOURCES:
-        1. Visual: The attached files.
-        2. Local: {local_context}
-        3. Web: {external_context}
+        1. Local: {local_context}
+        2. Web: {external_context}
         """
 
         contents = []
