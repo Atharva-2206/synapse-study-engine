@@ -15,7 +15,6 @@ class SynapseEngine:
         self.db = chromadb.PersistentClient(path="./chroma_db")
         self.collection = self.db.get_or_create_collection("study_material")
         
-        # Using Gemini 2.5 Flash for Native Multimodal & File API
         self.model_id = "gemini-2.5-flash"
 
     def clear_context(self):
@@ -26,47 +25,81 @@ class SynapseEngine:
             pass 
         self.collection = self.db.get_or_create_collection("study_material")
 
-    def upload_to_gemini(self, file_path):
-        """Natively uploads file to Gemini File API for context."""
-        file = self.client.files.upload(file=file_path)
-        
-        while file.state.name != "ACTIVE":
-            if file.state.name == "FAILED":
-                raise Exception("Gemini File Processing Failed.")
-            time.sleep(2)
-            file = self.client.files.get(name=file.name)
-            
-        return file
+    def rate_limited_generate(self, contents, status_callback=None):
+        """A core wrapper that prevents Streamlit from crashing on 429 quota errors."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                return self.client.models.generate_content(
+                    model=self.model_id,
+                    contents=contents
+                )
+            except Exception as e:
+                error_msg = str(e)
+                if "PerDay" in error_msg or "GenerateRequestsPerDay" in error_msg:
+                    raise Exception("Daily API quota exhausted. Please come back tomorrow!")
+                elif "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                    wait_time = 45 * (attempt + 1)
+                    if status_callback:
+                        status_callback(f"Gemini Free-Tier Rate Limit Hit. Pausing for {wait_time}s to recover...")
+                    time.sleep(wait_time)
+                else:
+                    raise e # Re-raise if it is a real error
+        raise Exception("Failed after maximum retries due to rate limits.")
 
-    def get_web_explainer(self, technical_term):
+    def upload_to_gemini(self, file_path, status_callback=None):
+        """Natively uploads file to Gemini File API for context (with rate limit protection)."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                file = self.client.files.upload(file=file_path)
+                
+                while file.state.name != "ACTIVE":
+                    if file.state.name == "FAILED":
+                        raise Exception("Gemini File Processing Failed.")
+                    time.sleep(2)
+                    file = self.client.files.get(name=file.name)
+                    
+                return file
+            except Exception as e:
+                error_msg = str(e)
+                if "PerDay" in error_msg or "GenerateRequestsPerDay" in error_msg:
+                    raise Exception("Daily upload quota exhausted. Please come back tomorrow!")
+                elif "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                    wait_time = 45 * (attempt + 1)
+                    if status_callback:
+                        status_callback(f"File Upload Limit Hit. Pausing for {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    raise e
+        raise Exception("Failed to upload file after maximum retries.")
+
+    def get_web_explainer(self, technical_term, status_callback=None):
         """
         The Explainer Engine: Using Exa.ai Neural Search.
-        Exa finds pages that 'feel' like a simple explanation/analogy.
+        Gracefully degrades if the Exa API quota is exhausted.
         """
         search_query = f"Here is a simple, real-world analogy to explain {technical_term} to a student:"
-        
         try:
             results = self.exa.search_and_contents(
-                search_query,
-                type="neural",
-                use_autoprompt=True,
-                num_results=1,
-                text=True, 
-                highlights=True 
+                search_query, type="neural", use_autoprompt=True,
+                num_results=1, text=True, highlights=True 
             )
-            
             if results.results:
                 best_match = results.results[0]
                 return f"Source: {best_match.url}\nContent: {best_match.text[:1500]}"
         except Exception as e:
-            return f"Exa Search Error: {str(e)}"
-        
+            error_msg = str(e).lower()
+            if "429" in error_msg or "quota" in error_msg or "limit" in error_msg:
+                if status_callback:
+                    status_callback("Exa.ai search quota reached. Relying on local documents only.")
+                return "External context unavailable (API Quota Exceeded)."
+            else:
+                return f"Exa Search Error: {str(e)}"
         return "No external analogy found."
 
     def ingest_local_context(self, text):
-        """
-        Chunks the text and stores it in ChromaDB.
-        """
+        """Chunks the text and stores it in ChromaDB."""
         if not text.strip(): return
         
         chunk_size = 1000
@@ -79,18 +112,13 @@ class SynapseEngine:
             start += (chunk_size - overlap)
             
         if not chunks: return
-        
         ids = [f"id_{int(time.time()*1000)}_{i}" for i in range(len(chunks))]
-        
         try:
-            self.collection.add(
-                documents=chunks,
-                ids=ids
-            )
+            self.collection.add(documents=chunks, ids=ids)
         except Exception as e:
             print(f"ChromaDB Error: {e}")
 
-    def generate_dossier(self, gemini_files, user_query, persona_prompt, use_external=False):
+    def generate_dossier(self, gemini_files, user_query, persona_prompt, use_external=False, status_callback=None):
         """Synthesizes File API, ChromaDB, and Exa.ai into a Study Dossier."""
         
         local_context = ""
@@ -101,12 +129,13 @@ class SynapseEngine:
         external_context = ""
         if use_external:
             try:
-                term_response = self.client.models.generate_content(
-                    model=self.model_id,
-                    contents=[f"Identify the primary technical concept in this query: {user_query}"]
+                term_response = self.rate_limited_generate(
+                    contents=[f"Identify the primary technical concept in this query: {user_query}"],
+                    status_callback=status_callback
                 )
                 tech_term = term_response.text.strip()
-                external_context = self.get_web_explainer(tech_term)
+                # Pass the status callback down to the Exa search
+                external_context = self.get_web_explainer(tech_term, status_callback=status_callback)
             except Exception as e:
                 external_context = f"Neural search unavailable: {str(e)}"
 
@@ -141,9 +170,9 @@ class SynapseEngine:
         contents.append(system_instruction)
         contents.append(user_query)
         
-        response = self.client.models.generate_content(
-            model=self.model_id,
-            contents=contents
+        response = self.rate_limited_generate(
+            contents=contents, 
+            status_callback=status_callback
         )
         
         return response.text
