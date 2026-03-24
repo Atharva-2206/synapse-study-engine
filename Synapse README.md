@@ -1,12 +1,12 @@
-# **🧠 Synapse AI Tutor**
+# **Synapse AI Tutor**
 
 **Synapse** is an adaptive, multimodal AI learning companion designed to break down complex study materials based on your unique learning style. Whether you are an auditory learner commuting to work, a STEM student needing data visualizations, or an ESL student requiring cross-cultural analogies, Synapse dynamically shapes the educational experience for you.
 
-## **🌐 Live Demo**
+## **Live Demo**
 
-Try the deployed application here: [**Synapse AI Tutor**](https://www.google.com/url?sa=E&source=gmail&q=https://your-app-url.streamlit.app)
+Try the deployed application here: [**Synapse AI Tutor**](https://synapse-ai-student.streamlit.app/)
 
-## **✨ Key Features**
+## **Key Features**
 
 Synapse operates using distinct "Personas", leveraging Retrieval-Augmented Generation (RAG) and the Gemini File API to understand uploaded PDFs, images, and text:
 
@@ -18,7 +18,7 @@ Synapse operates using distinct "Personas", leveraging Retrieval-Augmented Gener
 * 📖 **Critical Analyst (Humanities):** Acts as a Socratic professor, focusing on thematic breakdowns and textual evidence.  
 * 🌐 **Internet Searcher:** Bypasses local documents to scour the web for instant, factual answers.
 
-## **🛠️ Tech Stack**
+## **Tech Stack**
 
 * **Frontend:** [Streamlit](https://streamlit.io/)  
 * **LLM Engine:** Google Gemini 2.5 Flash (via google-genai SDK)  
@@ -28,7 +28,7 @@ Synapse operates using distinct "Personas", leveraging Retrieval-Augmented Gener
 * **Document Ingestion:** PyMuPDF (fitz), MarkItDown, Pillow  
 * **Visualization:** Plotly Express, Streamlit-Mermaid
 
-## **🗂️ Project Structure**
+## **Project Structure**
 
 synapse/  
 ├── app.py                  \# Main Streamlit application UI  
@@ -41,12 +41,12 @@ synapse/
 │   └── utils.py            \# Document parsing and Text-to-Speech helpers  
 └── test\_bench.py           \# LLM-as-a-judge RAG Evaluator
 
-## **🚀 Installation & Setup**
+## **Installation & Setup**
 
 **1\. Clone the repository**
 
-git clone \[https://github.com/YourUsername/synapse.git\](https://github.com/YourUsername/synapse.git)  
-cd synapse
+git clone [https://github.com/Atharva-2206/synapse-study-engine.git](https://github.com/Atharva-2206/synapse-study-engine.git)
+cd synapse-study-engine
 
 **2\. Install dependencies**
 
@@ -65,7 +65,7 @@ EXA\_API\_KEY=your\_exa\_api\_key\_here
 
 streamlit run app.py
 
-## **🧪 RAG Evaluation Suite**
+## **RAG Evaluation Suite**
 
 Synapse includes a custom "LLM-as-a-judge" evaluation suite to test the accuracy of the Retrieval-Augmented Generation pipeline. It scores the system on **Faithfulness** (Precision/Hallucination prevention) and **Answer Relevance**.
 
@@ -73,6 +73,6 @@ To run the test suite:
 
 python test\_bench.py
 
-## **📜 License**
+## **License**
 
 This project is for educational and portfolio purposes.
