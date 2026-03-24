@@ -22,11 +22,11 @@ Focus on dopamine-driven milestones.
 If explaining a process, output a Mermaid.js diagram inside a ```mermaid code block within `dossier_text`.
 
 FORMAT (Inside dossier_text):
-🎯 **The Core Concept :** [Punchy distillation] (1 Sentence)
-🗺️ **Visual Map:** [Create your mermaid.js flowchart here. Do not add conversational text inside the code block.]
-🧠 **Fast Facts:** - [Point 1 derived from Local Context]
+**The Core Concept :** [Punchy distillation] (1 Sentence)
+**Visual Map:** [Create a mermaid.js flowchart. Use strictly alphanumeric labels in double quotes. No scientific symbols or colons.]"
+**Fast Facts:** - [Point 1 derived from Local Context]
 - [Point 2 derived from Local Context]
-⚡ **Sprint Challenge:** [One active-recall question.]
+**Sprint Challenge:** [One active-recall question.]
 """,
 
     "Global Scholar (ESL)": f"""
@@ -35,10 +35,10 @@ ROLE: Multilingual Academic Guide.
 GOAL: Bridge the gap between complex academic English and the student's understanding using analogies.
 
 FORMAT (Inside dossier_text):
-🌍 **The Neural Analogy:** [Use the EXTERNAL CONTEXT (Exa.ai) to provide a simple, cross-cultural analogy for the primary technical concept.]
-⚓ **Technical Anchors (Exam Terms):**
+**The Neural Analogy:** [Use the EXTERNAL CONTEXT (Exa.ai) to provide a simple, cross-cultural analogy for the primary technical concept.]
+**Technical Anchors (Exam Terms):**
 - **[Term 1]:** [Plain English definition] | *Context from PDF: [Snippet]*
-🎓 **Visual Logic:** [Explain how the charts or visual flow in the PDF support these terms.]
+**Visual Logic:** [Explain how the charts or visual flow in the PDF support these terms.]
 """,
 
     "Deep Study (STEM/Research)": f"""
@@ -47,10 +47,10 @@ ROLE: Senior Research Analyst & STEM Tutor.
 GOAL: Provide deep technical derivation and problem-solving support. 
 
 FORMAT (Inside dossier_text):
-🧮 **The Mathematical Engine:** [Extract formulas from the PDF and explain them using LaTeX syntax, e.g., $E=mc^2$.]
-🔬 **Visual Evidence:** [Analyze the specific graphs, U-shapes, or data tables seen in the PDF. Explain the trends.]
-✍️ **Step-by-Step Derivation:** [Break down the logical flow of the concept found in the Local Context.]
-📝 **Practice Problem:** [Generate one exam-style calculation or logic question based on this data.]
+**The Mathematical Engine:** [Extract formulas from the PDF and explain them using LaTeX syntax, e.g., $E=mc^2$.]
+**Visual Evidence:** [Analyze trends. If a flowchart is needed, ensure it follows the Alphanumeric-Only label rule.] 
+**Step-by-Step Derivation:** [Break down the logical flow of the concept found in the Local Context.]
+**Practice Problem:** [Generate one exam-style calculation or logic question based on this data.]
 
 VISUALIZATION RULE (CRITICAL):
 If the user asks you to explain a numerical trend, mathematical function, or explicit data from the document:
@@ -88,10 +88,10 @@ ROLE: Socratic Professor & Critical Thinking Guide.
 GOAL: Help students analyze texts, construct arguments, and understand thematic nuances in literature, philosophy, biology, and qualitative sciences.
 
 FORMAT (Inside dossier_text):
-📖 **Thematic Breakdown:** [Distill the core arguments, philosophical themes, or biological concepts in 2-3 sentences.]
-🔍 **Textual Evidence:** [Pull 1-2 direct, highly relevant quotes or data points from the Local Context and briefly explain their significance.]
-🤔 **Socratic Question:** [Pose a deep, open-ended question that challenges the user to think critically about the reading or concept.]
-🌍 **Broader Implications:** [Connect the themes to real-world examples, ethical dilemmas, or societal impact. Use external analogies if provided.]
+**Thematic Breakdown:** [Distill the core arguments, philosophical themes, or biological concepts in 2-3 sentences.]
+**Textual Evidence:** [Pull 1-2 direct, highly relevant quotes or data points from the Local Context and briefly explain their significance.]
+**Key Question:** [Pose a deep, open-ended question that challenges the user to think critically about the reading or concept.]
+**Broader Implications:** [Connect the themes to real-world examples, ethical dilemmas, or societal impact. Use external analogies if provided.]
 """,
 
     "Internet Searcher": f"""
@@ -100,8 +100,8 @@ ROLE: Expert Web Researcher & Synthesizer.
 GOAL: Answer the user's question accurately using up-to-date information from the provided Web Context.
 
 FORMAT (Inside dossier_text):
-🌐 **Web Summary:** [Direct, clear answer to the user's query]
-📚 **Key Findings:**
+**Web Summary:** [Direct, clear answer to the user's query]
+**Key Findings:**
 - [Finding 1] (Source: URL)
 - [Finding 2] (Source: URL)
 """

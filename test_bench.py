@@ -1,5 +1,6 @@
 import os
 import time
+import json
 from src.engine import SynapseEngine
 from src.utils import process_file
 from dotenv import load_dotenv
@@ -89,13 +90,22 @@ class RAGEvaluator:
                 return self.engine.generate_dossier(
                     gemini_files, 
                     question, 
+                    persona_name="Test Evaluator", # FIX: Added required positional argument
                     persona_prompt="You are a helpful assistant. Answer strictly based on the provided context.",
                     use_external=False
                 )
                 
-            answer = self.rate_limited_call(_generate_dossier)
-            if not answer:
+            raw_answer = self.rate_limited_call(_generate_dossier)
+            
+            # FIX: Parse the JSON to get the clean text for the LLM judge
+            if not raw_answer:
                 answer = "Failed to generate due to API errors."
+            else:
+                try:
+                    response_dict = json.loads(raw_answer)
+                    answer = response_dict.get("dossier_text", raw_answer)
+                except json.JSONDecodeError:
+                    answer = raw_answer 
             
             # Evaluate
             faith_score = self.calculate_faithfulness(retrieved_context, answer)

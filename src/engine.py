@@ -163,12 +163,18 @@ class SynapseEngine:
         system_instruction = f"""
         {persona_prompt}
         {fileless_notice}
+        Persona Context: You are {persona_name}.
         ---
         STRICT FORMATTING RULES:
         - DENSITY: Use aggressive whitespace.
         - MATH: Use LaTeX for ALL formulas ($...$). 
-        - MERMAID DIAGRAMS: Always start with 'graph TD'. Enclose node labels in double quotes. 
-          Example: A["f: S -> S"]
+        - MERMAID DIAGRAMS: AMERMAID DIAGRAM RULES (CRITICAL):
+        1. Always start with 'graph TD'. 
+        2. EVERY node label MUST be in double quotes. 
+        3. Labels MUST be Alphanumeric ONLY.
+        4. 🛑 FORBIDDEN: Do NOT use colons (:), commas (,), parentheses (), or LaTeX symbols ($) inside labels. 
+           Example: Instead of "Gravitational Potential: V_g", use "Gravitational Potential Vg".
+        5. The block MUST contain ONLY the Mermaid syntax.
         ---
         SOURCES:
         1. Local: {local_context}

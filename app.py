@@ -351,9 +351,10 @@ else:
 
                 if mermaid_match:
                     mermaid_code = mermaid_match.group(1).strip()
+                    # REMOVE common "hallucinated" characters that break Mermaid
+                    mermaid_code = mermaid_code.replace(";", "") 
                     st_mermaid(mermaid_code)
                     final_text = re.sub(mermaid_pattern, "\n*(Visual Roadmap Generated Above)*\n", final_text, flags=re.DOTALL | re.IGNORECASE)
-
                 st.markdown(final_text)
             
             gen_warning_placeholder.empty()
