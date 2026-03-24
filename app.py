@@ -1,11 +1,53 @@
 import streamlit as st
 import os
 import re
+import json
 import plotly.express as px
 from streamlit_mermaid import st_mermaid
 from src.engine import SynapseEngine
 from src.utils import process_file, text_to_audio
 from src.prompts import PERSONAS
+
+st.set_page_config(page_title="Synapse AI", layout="wide")
+
+st.markdown("""
+<style>
+    /* Hide standard Streamlit chrome EXCEPT the sidebar toggle */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    [data-testid="stAppDeployButton"] {display: none;}
+    
+    .synapse-title {
+        background: linear-gradient(45deg, #FF4B2B, #FF416C);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        font-size: 3.5rem;
+        font-weight: 900;
+        margin-bottom: -10px;
+    }
+    
+    .synapse-subtitle {
+        text-align: center;
+        color: #888;
+        font-size: 1.1rem;
+        margin-bottom: 2rem;
+    }
+
+    div[data-testid="stButton"] button {
+        border-radius: 12px;
+        transition: all 0.3s ease;
+        border: 1px solid #e0e0e0;
+        font-weight: 600;
+    }
+    div[data-testid="stButton"] button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 16px rgba(255, 65, 108, 0.2);
+        border-color: #FF416C;
+        color: #FF416C;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -25,11 +67,8 @@ if "processed_audio_hashes" not in st.session_state:
 if "current_persona" not in st.session_state:
     st.session_state.current_persona = "Home"
 
-st.set_page_config(page_title="Synapse AI", layout="wide")
-
-st.markdown("<h1 style='text-align: center;'>🧠 Synapse: Interactive Study Engine</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray;'>Your AI-powered, multimodal learning companion.</p>", unsafe_allow_html=True)
-st.markdown("---")
+st.markdown("<h1 class='synapse-title'>🧠 Synapse</h1>", unsafe_allow_html=True)
+st.markdown("<p class='synapse-subtitle'>Your AI-powered, multimodal learning companion.</p>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("Tutor Settings")
@@ -116,7 +155,6 @@ if uploaded_files:
 
 if mode == "Home":
     st.markdown("### 🎯 Choose Your Perfect Tutor")
-    st.write("Click on a persona card below based on what you need to study today:")
     
     col1, col2, col3 = st.columns(3)
     
@@ -280,16 +318,33 @@ else:
                     st_mermaid(mermaid_code)
                     response_text = re.sub(r"```mermaid.*?```", "*(Visual Roadmap Generated Above)*", response_text, flags=re.DOTALL)
 
-                plotly_match = re.search(r"```python_plotly\s+(.*?)\s+```", response_text, re.DOTALL)
+                plotly_match = re.search(r"```json_plotly\s+(.*?)\s+```", response_text, re.DOTALL)
                 if plotly_match:
                     try:
-                        exec_globals = {"px": px, "fig": None}
-                        exec(plotly_match.group(1), exec_globals)
-                        if exec_globals["fig"]:
-                            st.plotly_chart(exec_globals["fig"])
+                        chart_data = json.loads(plotly_match.group(1))
+                        c_type = chart_data.get("chart_type", "line").lower()
+                        x_data = chart_data.get("x_data", [])
+                        y_data = chart_data.get("y_data", [])
+                        title = chart_data.get("title", "Data Visualization")
+                        labels = {
+                            "x": chart_data.get("x_axis_label", "X Axis"), 
+                            "y": chart_data.get("y_axis_label", "Y Axis")
+                        }
+                        
+                        if c_type == "bar":
+                            fig = px.bar(x=x_data, y=y_data, title=title, labels=labels)
+                        elif c_type == "scatter":
+                            fig = px.scatter(x=x_data, y=y_data, title=title, labels=labels)
+                        else:
+                            fig = px.line(x=x_data, y=y_data, title=title, labels=labels)
+                            
+                        fig.update_layout(template="plotly_white", margin=dict(l=20, r=20, t=40, b=20))
+                        st.plotly_chart(fig, use_container_width=True)
+                        
                     except Exception as e:
-                        st.error(f"Graph Error: {e}")
-                    response_text = re.sub(r"```python_plotly.*?```", "*(Interactive Graph Generated Above)*", response_text, flags=re.DOTALL)
+                        st.error(f"⚠️ Graph Rendering Error: {e}")
+                    
+                    response_text = re.sub(r"```json_plotly.*?```", "*(Interactive Graph Generated Above)*", response_text, flags=re.DOTALL)
 
                 st.markdown(response_text)
             

@@ -157,12 +157,11 @@ class SynapseEngine:
         MERMAID DIAGRAM RULES (CRITICAL):
         1. Always start with 'flowchart TD' or 'graph TD'.
         2. EVERY node label MUST be in double quotes to avoid syntax errors. 
-           Example: A["f : S -> S"] --> B["Fixed Point Found"]
         3. DO NOT use math symbols like '∘', '→', or LaTeX inside Mermaid labels. Use plain text only.
         
         VISUAL ENGINE RULES:
         - ROADMAPS: Use ```mermaid code blocks.
-        - GRAPHS: Use ```python_plotly code blocks.
+        - GRAPHS: Use ```json_plotly code blocks populated with strict JSON data. No Python code.
         ---
         
         SOURCES:
