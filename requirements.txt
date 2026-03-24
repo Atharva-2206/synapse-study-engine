@@ -1,11 +1,23 @@
+#Core UI & Data
+streamlit 
+pydantic
+
+#AI & Search Models
 google-genai
 exa_py
-streamlit
-streamlit-mermaid
-plotly
+
+#Vector Database
 chromadb
+
+#Visualization
+plotly
+streamlit-mermaid
+
+#Environment Management
+python-dotenv
+
+#Document, Image & Audio Utilities
 pymupdf
 pillow
-python-dotenv
 gTTS
 markitdown

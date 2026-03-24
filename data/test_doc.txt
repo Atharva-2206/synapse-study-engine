@@ -1,0 +1,1 @@
+Synapse is an AI EdTech tool built in 2024. It uses Gemini 2.5 Flash and ChromaDB to help students learn. The tool features personas like Commuter Podcast and Sprint Mode.

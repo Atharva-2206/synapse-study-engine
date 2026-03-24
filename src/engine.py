@@ -1,11 +1,25 @@
 import os
 import time
 from google import genai
+from google.genai import types
+from pydantic import BaseModel, Field
+from typing import List, Optional
 from exa_py import Exa
 from dotenv import load_dotenv
 import chromadb
 
 load_dotenv()
+
+# --- DETERMINISTIC STRUCTURED OUTPUT SCHEMA ---
+class SynapseResponse(BaseModel):
+    dossier_text: str = Field(description="The full Markdown formatted explanation, including LaTeX equations and Mermaid blocks.")
+    requires_graph: bool = Field(description="Set to true if a data visualization is needed based on the context.")
+    chart_type: Optional[str] = Field(None, description="'line', 'bar', or 'scatter'")
+    title: Optional[str] = Field(None, description="Title of the chart")
+    x_axis_label: Optional[str] = Field(None, description="X axis label")
+    y_axis_label: Optional[str] = Field(None, description="Y axis label")
+    x_data: Optional[list[str]] = Field(None, description="X axis data points (categories or stringified numbers)")
+    y_data: Optional[list[float]] = Field(None, description="Y axis data points (strict numeric)")
 
 class SynapseEngine:
     def __init__(self):
@@ -22,13 +36,14 @@ class SynapseEngine:
             pass 
         self.collection = self.db.get_or_create_collection("study_material")
 
-    def rate_limited_generate(self, contents, status_callback=None):
+    def rate_limited_generate(self, contents, config=None, status_callback=None):
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 return self.client.models.generate_content(
                     model=self.model_id,
-                    contents=contents
+                    contents=contents,
+                    config=config
                 )
             except Exception as e:
                 error_msg = str(e)
@@ -57,7 +72,7 @@ class SynapseEngine:
             except Exception as e:
                 error_msg = str(e)
                 if "PerDay" in error_msg or "GenerateRequestsPerDay" in error_msg:
-                    raise Exception("Daily upload quota exhausted. Please come back tomorrow!")
+                    raise Exception("Daily upload quota exhausted.")
                 elif "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
                     wait_time = 45 * (attempt + 1)
                     if status_callback:
@@ -143,27 +158,18 @@ class SynapseEngine:
 
         fileless_notice = ""
         if fileless_mode:
-            fileless_notice = "\n[CRITICAL SYSTEM NOTICE: NO FILES UPLOADED. Ignore ALL prompt formatting rules demanding 'Extract from PDF', 'Analyze visual layouts', or 'Pull from local context'. Answer strictly using your internal knowledge and the Web Context provided below.]\n"
+            fileless_notice = "\n[CRITICAL SYSTEM NOTICE: NO FILES UPLOADED. Ignore ALL prompt formatting rules demanding 'Extract from PDF'. Answer strictly using your internal knowledge and the Web Context.]\n"
 
         system_instruction = f"""
         {persona_prompt}
         {fileless_notice}
         ---
         STRICT FORMATTING RULES:
-        - DENSITY: Use aggressive whitespace. Use blocks for LaTeX formatted equations
-        - SEPARATION: Use '---' horizontal rules between major sections.
+        - DENSITY: Use aggressive whitespace.
         - MATH: Use LaTeX for ALL formulas ($...$). 
-        
-        MERMAID DIAGRAM RULES (CRITICAL):
-        1. Always start with 'flowchart TD' or 'graph TD'.
-        2. EVERY node label MUST be in double quotes to avoid syntax errors. 
-        3. DO NOT use math symbols like '∘', '→', or LaTeX inside Mermaid labels. Use plain text only.
-        
-        VISUAL ENGINE RULES:
-        - ROADMAPS: Use ```mermaid code blocks.
-        - GRAPHS: Use ```json_plotly code blocks populated with strict JSON data. No Python code.
+        - MERMAID DIAGRAMS: Always start with 'graph TD'. Enclose node labels in double quotes. 
+          Example: A["f: S -> S"]
         ---
-        
         SOURCES:
         1. Local: {local_context}
         2. Web: {external_context}
@@ -174,8 +180,16 @@ class SynapseEngine:
         contents.append(system_instruction)
         contents.append(user_query)
         
+        # --- PYDANTIC ENFORCEMENT CONFIG ---
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=SynapseResponse,
+            temperature=0.2, 
+        )
+        
         response = self.rate_limited_generate(
             contents=contents, 
+            config=config,
             status_callback=status_callback
         )
         

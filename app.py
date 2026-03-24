@@ -12,7 +12,6 @@ st.set_page_config(page_title="Synapse AI", layout="wide")
 
 st.markdown("""
 <style>
-    /* Hide standard Streamlit chrome EXCEPT the sidebar toggle */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stAppDeployButton"] {display: none;}
@@ -88,16 +87,8 @@ with st.sidebar:
                 st.session_state.current_persona = new_mode
             st.rerun()
             
-        supported_types = ['pdf', 'png', 'jpg', 'jpeg', 'heic', 'docx', 'pptx', 'xlsx', 'csv', 'txt', 'md']
+        supported_types = ['pdf', 'png', 'jpg', 'jpeg', 'heic', 'csv', 'txt', 'md']
         uploaded_files = st.file_uploader("Upload Study Materials", type=supported_types, accept_multiple_files=True)
-        
-        current_file_names = set(f.name for f in uploaded_files) if uploaded_files else set()
-        removed_files = st.session_state.uploaded_file_names - current_file_names
-        
-        if removed_files:
-            st.session_state.engine.clear_context()
-            st.session_state.uploaded_file_names = set()
-            st.session_state.gemini_files = []
         
         if st.button("Clear Chat History"):
             st.session_state.messages = []
@@ -134,7 +125,7 @@ if uploaded_files:
                 ext = os.path.splitext(uploaded_file.name)[1].lower()
                 upload_path = temp_path
                 
-                if ext not in ['.pdf', '.png', '.jpg', '.jpeg', '.heic', '.txt', '.csv', '.md']:
+                if ext not in ['.pdf', '.png', '.jpg', '.jpeg', '.heic', '.csv', '.txt', '.md']:
                     md_path = f"data/{uploaded_file.name}.txt"
                     with open(md_path, "w", encoding="utf-8") as f:
                         f.write(raw_text)
@@ -283,12 +274,13 @@ else:
                 gen_warning_placeholder.warning(f"🚦 {msg}")
 
             generation_error = None
+            raw_response_text = ""
             
             with st.spinner("Synapse is thinking..."):
                 try:
                     use_external = mode in ["Deep Study (STEM/Research)", "Global Scholar (ESL)", "Critical Analyst (Humanities/Bio)", "Internet Searcher"] or not st.session_state.gemini_files
                     
-                    response_text = st.session_state.engine.generate_dossier(
+                    raw_response_text = st.session_state.engine.generate_dossier(
                         st.session_state.gemini_files, 
                         user_text, 
                         mode,
@@ -306,29 +298,36 @@ else:
                 
             audio_bytes = None
             
+            # --- 1. PARSE NATIVE DICTIONARY (NO REGEX FOR JSON) ---
+            try:
+                response_dict = json.loads(raw_response_text)
+                final_text = response_dict.get("dossier_text", raw_response_text)
+                has_graph = response_dict.get("requires_graph", False)
+            except json.JSONDecodeError:
+                # Absolute fallback if API glitches
+                final_text = raw_response_text
+                has_graph = False
+                response_dict = {}
+
             if mode == "Commuter Podcast (Audio)":
-                st.markdown(response_text)
-                audio_fp = text_to_audio(response_text)
+                st.markdown(final_text)
+                audio_fp = text_to_audio(final_text)
                 audio_bytes = audio_fp.read()
                 st.audio(audio_bytes, format="audio/mp3", autoplay=True)
             else:
-                mermaid_match = re.search(r"```mermaid\s+(.*?)\s+```", response_text, re.DOTALL)
-                if mermaid_match:
-                    mermaid_code = mermaid_match.group(1)
-                    st_mermaid(mermaid_code)
-                    response_text = re.sub(r"```mermaid.*?```", "*(Visual Roadmap Generated Above)*", response_text, flags=re.DOTALL)
-
-                plotly_match = re.search(r"```json_plotly\s+(.*?)\s+```", response_text, re.DOTALL)
-                if plotly_match:
+                # --- 2. RENDER DYNAMIC PLOTLY IF FLAG IS TRUE ---
+                if has_graph:
                     try:
-                        chart_data = json.loads(plotly_match.group(1))
-                        c_type = chart_data.get("chart_type", "line").lower()
-                        x_data = chart_data.get("x_data", [])
-                        y_data = chart_data.get("y_data", [])
-                        title = chart_data.get("title", "Data Visualization")
+                        c_type = response_dict.get("chart_type", "line")
+                        if not c_type: c_type = "line"
+                        c_type = c_type.lower()
+                        
+                        x_data = response_dict.get("x_data", [])
+                        y_data = response_dict.get("y_data", [])
+                        title = response_dict.get("title", "Data Visualization")
                         labels = {
-                            "x": chart_data.get("x_axis_label", "X Axis"), 
-                            "y": chart_data.get("y_axis_label", "Y Axis")
+                            "x": response_dict.get("x_axis_label", "X Axis"), 
+                            "y": response_dict.get("y_axis_label", "Y Axis")
                         }
                         
                         if c_type == "bar":
@@ -340,17 +339,27 @@ else:
                             
                         fig.update_layout(template="plotly_white", margin=dict(l=20, r=20, t=40, b=20))
                         st.plotly_chart(fig, use_container_width=True)
-                        
+                        st.markdown("*(Interactive Graph Generated Above)*")
                     except Exception as e:
-                        st.error(f"⚠️ Graph Rendering Error: {e}")
-                    
-                    response_text = re.sub(r"```json_plotly.*?```", "*(Interactive Graph Generated Above)*", response_text, flags=re.DOTALL)
+                        st.warning(f"⚠️ Graph Render Error: {e}")
 
-                st.markdown(response_text)
+                # --- 3. RENDER MARKDOWN TEXT (Intercepting Mermaid safely) ---
+                # We dynamically create the triple backticks to avoid markdown parser truncation
+                bt = "`" * 3
+                mermaid_pattern = rf"{bt}(?:mermaid|graph|flowchart)\s*\n(.*?){bt}"
+                mermaid_match = re.search(mermaid_pattern, final_text, re.DOTALL | re.IGNORECASE)
+
+                if mermaid_match:
+                    mermaid_code = mermaid_match.group(1).strip()
+                    st_mermaid(mermaid_code)
+                    final_text = re.sub(mermaid_pattern, "\n*(Visual Roadmap Generated Above)*\n", final_text, flags=re.DOTALL | re.IGNORECASE)
+
+                st.markdown(final_text)
             
             gen_warning_placeholder.empty()
             
-            message_data = {"role": "assistant", "content": response_text}
+            # Save the clean text to chat history
+            message_data = {"role": "assistant", "content": final_text}
             if audio_bytes:
                 message_data["audio"] = audio_bytes
             st.session_state.messages.append(message_data)

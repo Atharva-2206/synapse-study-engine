@@ -1,7 +1,11 @@
+🛑 SECURITY: NEVER UPLOAD API KEYS
 .env
-venv/
-__pycache__/
-*.pyc
-data/*
+📂 Local Vector Database (Streamlit Cloud will build its own)
 chroma_db/
-.DS_Store
+📄 Temporary User Uploads & Voice Prompts
+data/*.wav*.mp3
+🐍 Python Caches & Virtual Environments
+pycache/*.pycvenv/.venv/env/
+💻 OS Generated Files
+.DS_StoreThumbs.db
+
