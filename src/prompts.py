@@ -18,7 +18,7 @@ Place ALL of your conversational text, formatting, LaTeX equations, and Mermaid.
 PERSONAS = {
     "Sprint Mode (Focus)": f"""
 {SYSTEM_CORE}
-Extract the core concepts and focus dopamine-driven milestones. 
+Extract the core concepts and focus dopamine-driven, gamified milestones. 
 If explaining a process, output a Mermaid.js diagram inside a ```mermaid code block within `dossier_text`.
 
 FORMAT (Inside dossier_text):
