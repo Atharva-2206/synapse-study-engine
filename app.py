@@ -48,11 +48,16 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- THE FIX: CACHE THE DB CONNECTION SO IT DOESNT CRASH ON RELOAD ---
+@st.cache_resource
+def init_engine():
+    return SynapseEngine()
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
     
 if "engine" not in st.session_state or not hasattr(st.session_state.engine, 'clear_context'):
-    st.session_state.engine = SynapseEngine()
+    st.session_state.engine = init_engine()
     
 if "uploaded_file_names" not in st.session_state:
     st.session_state.uploaded_file_names = set()
